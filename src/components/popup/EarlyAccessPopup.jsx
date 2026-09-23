@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpRight, Check, X } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 const EarlyAccessPopup = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const productSection = document.getElementById("product");
@@ -24,10 +27,6 @@ const EarlyAccessPopup = () => {
       const productRect =
         productSection.getBoundingClientRect();
 
-      /*
-        Trigger when the visitor has scrolled past
-        the bottom of the Product Showcase section.
-      */
       const crossedProductSection =
         productRect.bottom <= window.innerHeight * 0.75;
 
@@ -46,7 +45,6 @@ const EarlyAccessPopup = () => {
       passive: true,
     });
 
-    // Check once in case the page is already scrolled.
     handleScroll();
 
     return () => {
@@ -59,16 +57,55 @@ const EarlyAccessPopup = () => {
 
   const closePopup = () => {
     setIsOpen(false);
+    setError("");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
+    setError("");
+
     if (!email.trim()) {
+      setError("Please enter your email address.");
       return;
     }
 
-    setSubmitted(true);
+    setIsSubmitting(true);
+
+    try {
+      const { error: supabaseError } = await supabase
+        .from("early_access")
+        .insert([
+          {
+            email: email.trim().toLowerCase(),
+          },
+        ]);
+
+      if (supabaseError) {
+        console.error("Supabase insert error:", supabaseError);
+        if (supabaseError.code === "23505") {
+          setError(
+            "You're already on the early access list."
+          );
+        } else {
+          setError(
+            "Something went wrong. Please try again."
+          );
+        }
+
+        return;
+      }
+
+      setSubmitted(true);
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        "Something went wrong. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -220,25 +257,35 @@ const EarlyAccessPopup = () => {
                             type="email"
                             required
                             value={email}
-                            onChange={(event) =>
-                              setEmail(event.target.value)
-                            }
+                            onChange={(event) => {
+                              setEmail(event.target.value);
+                              setError("");
+                            }}
                             placeholder="Your email address"
                             className="h-14 min-w-0 flex-1 rounded-full border border-black/10 bg-white px-5 text-sm text-black outline-none transition-all placeholder:text-black/30 focus:border-black"
                           />
 
                           <button
                             type="submit"
-                            className="group inline-flex h-14 items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold uppercase tracking-wide text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--color-primary)] hover:text-black"
+                            disabled={isSubmitting}
+                            className="group inline-flex h-14 items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold uppercase tracking-wide text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--color-primary)] hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Join
+                            {isSubmitting ? "Joining..." : "Join"}
 
-                            <ArrowUpRight
-                              size={17}
-                              className="transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1"
-                            />
+                            {!isSubmitting && (
+                              <ArrowUpRight
+                                size={17}
+                                className="transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1"
+                              />
+                            )}
                           </button>
                         </div>
+
+                        {error && (
+                          <p className="mt-3 text-xs font-medium text-red-500">
+                            {error}
+                          </p>
+                        )}
                       </form>
 
                       <p className="mt-4 text-[10px] leading-4 text-black/35">
@@ -283,6 +330,7 @@ const EarlyAccessPopup = () => {
                       </button>
                     </motion.div>
                   )}
+
                 </div>
               </div>
             </motion.div>
